@@ -1,0 +1,86 @@
+---
+title: "Lab2_assignment"
+author: "Matt Harris"
+date: "9/8/2021"
+editor: "Jasmine Siyu Wu"
+output: github_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup_package, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(tmap) # mapping, install if you don't have it
+set.seed(717)
+```
+
+
+## Load data from {tidycensus}
+
+```{r acs_vars, cache = TRUE, message = FALSE, warning = FALSE, results=FALSE}
+acs_vars <- c( "B01001_001", # ACS total Pop estimate,
+               "B08201_001", # Estimate of total households
+               "B08201_002", # Estimate of total households with no vehicles
+               "B17001_002") # Estimate of total population whose income in the past 12 months below poverty level
+
+myTracts <- c("42101007300", 
+              "42101007800", 
+              "42101007900", 
+              "42101008000" )
+
+acsTractsPHL.2019.sf <- get_acs(geography = "tract",
+                             year = 2019,
+                             variables = acs_vars,
+                             geometry = TRUE,
+                             state  = "PA",
+                             county = "Philadelphia",
+                             output = "wide") %>%
+  dplyr::select (GEOID, NAME, all_of(paste0(acs_vars,"E"))) %>%
+  rename (total_pop.2019 = B01001_001E,
+          total_HH.2016 = B08201_001E,
+          total_HH_no_vehicle.2019 = B08201_002E,
+          total_poverty.2019 = B17001_002E) %>%
+  mutate(poverty_rate.2019 = ifelse(total_pop.2019 == 0, 
+                               0,
+                               total_poverty.2019/total_pop.2019)) %>%
+  mutate(Neighborhood = ifelse(GEOID %in% myTracts,
+                               "CEDAR PARK",
+                               "REST OF PHILADELPHIA"))
+```
+
+
+## Transform to WGS84 with {sf}
+
+```{r}
+acsTractsPHL.2019.sf <- acsTractsPHL.2019.sf %>% 
+  st_transform(crs = "EPSG:4326")
+```
+
+
+## Plot with {ggplot2}
+
+```{r ggplot_geom_sf, warning = FALSE, echo = FALSE}
+ggplot()+
+  geom_sf(data = acsTractsPHL.2019.sf, aes(fill = poverty_rate.2019),
+          color = "transparent")+
+  scale_fill_viridis_c(alpha = 1, begin = 0, end = 1, direction = -1, option = "D", aesthetics = "fill")+
+  geom_sf(data = acsTractsPHL.2019.sf %>%
+            filter(Neighborhood == "CEDAR PARK") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent")+
+  # Bonus to figure out different color ramps with scale_fill_viridis()
+  labs(
+    title = "Poverty Rate by Tract (2019)",
+    subtitle = "Philadelphia, PA",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+
+```
